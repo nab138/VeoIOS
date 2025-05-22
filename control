@@ -1,0 +1,9 @@
+Package: me.nabdev.veo
+Name: Veo
+Version: 0.0.1
+Architecture: iphoneos-arm
+Description: An awesome SwiftUI application!
+Maintainer: nab138
+Author: nab138
+Section: Utilities
+Depends: firmware (>= 14.0)

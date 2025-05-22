@@ -1,0 +1,3 @@
+[submodule "src/supabase-swift"]
+	path = src/supabase-swift
+	url = https://github.com/nab138/supabase-swift
