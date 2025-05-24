@@ -5,7 +5,11 @@ struct ContentView: View {
 
     var body: some View {
     Group {
-      AuthView()
+      if isAuthenticated {
+        ListsView()
+      } else {
+        AuthView()
+      }
     }
     .task {
       for await state in supabase.auth.authStateChanges {
