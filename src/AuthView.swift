@@ -4,14 +4,13 @@ struct AuthView: View {
   @State var email = ""
   @State var password = ""
   @State var isLoading = false
-  @State var signingUp = false
   @State var result: Result<Void, Error>?
 
   var body: some View {
     ZStack {
       VeoListView.color2.ignoresSafeArea() // Ensures background covers the whole screen
       VStack(spacing: 0) {
-        Text("Veo - Sign " + (signingUp ? "up" : "in"))
+        Text("Welcome to Veo")
           .font(.largeTitle)
           .fontWeight(.bold)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -50,7 +49,7 @@ struct AuthView: View {
           .background(Color.steppedGradientColor(for: 1, count: rowCount))
           // Sign in/up button styled like a VeoListView row (no button background, whole row is tappable)
           HStack {
-            Text("Sign " + (signingUp ? "up" : "in"))
+            Text("Sign in")
               .font(.title2)
               .foregroundColor(.white)
               .frame(maxWidth: .infinity, alignment: .leading)
@@ -63,7 +62,7 @@ struct AuthView: View {
             signInButtonTapped()
           }
           HStack {
-            Text("Don't have an account? Sign " + (signingUp ? "in!" : "up!"))
+            Text("Sign up")
               .font(.title2)
               .foregroundColor(.white)
               .frame(maxWidth: .infinity, alignment: .leading)
@@ -73,8 +72,7 @@ struct AuthView: View {
           .background(Color.steppedGradientColor(for: 3, count: rowCount))
           .contentShape(Rectangle())
           .onTapGesture {
-            result = nil
-            signingUp.toggle()
+            signUpButtonTapped()
           }
           if isLoading {
             HStack {
@@ -87,16 +85,7 @@ struct AuthView: View {
           if !isLoading, let result {
             switch result {
             case .success:
-              HStack {
-                Text("Signed " + (signingUp ? "up" : "in") + " successfully")
-                  .font(.title2)
-                  .foregroundColor(.green)
-                  .frame(maxWidth: .infinity, alignment: .leading)
-                  .padding(.horizontal)
-                  .frame(maxWidth: .infinity, alignment: .center)
-              }
-              .frame(maxWidth: .infinity, minHeight: 64)
-              .background(Color.steppedGradientColor(for: 4, count: rowCount))
+                Text("Success!")
             case .failure(let error):
               HStack {
                 Text(error.localizedDescription.prefix(1).capitalized + error.localizedDescription.dropFirst())
@@ -122,17 +111,27 @@ struct AuthView: View {
       defer { isLoading = false }
 
       do {
-        if signingUp {
-          try await supabase.auth.signUp(
+        try await supabase.auth.signIn(
             email: email,
             password: password
-          )
-        } else {
-          try await supabase.auth.signIn(
-              email: email,
-              password: password
-          )
-        }
+        )
+        result = .success(())
+      } catch {
+        result = .failure(error)
+      }
+    }
+  }
+
+  func signUpButtonTapped() {
+    Task {
+      isLoading = true
+      defer { isLoading = false }
+
+      do {
+        try await supabase.auth.signUp(
+          email: email,
+          password: password
+        )
         result = .success(())
       } catch {
         result = .failure(error)
