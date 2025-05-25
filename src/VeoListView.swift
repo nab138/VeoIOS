@@ -15,13 +15,11 @@ struct VeoListView: View {
     @State private var isExiting: Bool = false
     @State private var exitingScale: CGFloat = 1.0
     
-    var nonRenamableIndices: Set<Int> = [] // Indices of non-renamable items, default empty
-    // Helper to determine if an item is editable
+    var nonRenamableIndices: Set<Int> = []
     func isEditable(idx: Int) -> Bool {
         onRename != nil && idx < items.count && !nonRenamableIndices.contains(idx)
     }
     
-    // Helper to get safe area insets in a modern way
     private var safeAreaInsets: UIEdgeInsets {
         (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
             .keyWindow?.safeAreaInsets ?? .zero
@@ -29,10 +27,8 @@ struct VeoListView: View {
 
     var body: some View {
         ZStack {
-            // Main scalable content with proper backgrounds
             ScrollView {
                 VStack(spacing: 0) {
-                    // Title area with color1
                     Text(title)
                         .font(.largeTitle)
                         .fontWeight(.bold)
@@ -43,7 +39,6 @@ struct VeoListView: View {
                         .padding(.bottom, 24)
                         .background(VeoListView.color1)
                     
-                    // List items
                     ForEach(items.indices, id: \.self) { idx in
                         ZStack(alignment: .leading) {
                             if editingIndex == idx, isEditable(idx: idx) {
@@ -78,7 +73,6 @@ struct VeoListView: View {
                                 .background(steppedGradientColor(for: idx))
                                 .contentShape(Rectangle())
                                 .onTapGesture {
-                                    // Only trigger onItemTap if not editing
                                     if let onItemTap = onItemTap, editingIndex != idx {
                                         onItemTap(idx)
                                     }
@@ -87,7 +81,6 @@ struct VeoListView: View {
                         }
                     }
                     
-                    // Bottom spacer to fill remaining space
                     Spacer(minLength: safeAreaInsets.bottom)
                         .frame(maxWidth: .infinity)
                         .background(VeoListView.color2)
@@ -96,11 +89,10 @@ struct VeoListView: View {
             }
             .background(
                 ZStack {
-                    // Background fills for overscroll (non-scaling)
                     VeoListView.color2.ignoresSafeArea()
                     VStack {
                         VeoListView.color1.ignoresSafeArea(edges: .top)
-                            .frame(height: 200) // Tall enough for overscroll
+                            .frame(height: 200)
                         Spacer()
                     }
                 }
@@ -132,7 +124,7 @@ struct VeoListView: View {
     }
 }
 
-// Helper to get keyWindow for safeAreaInsets
+
 extension UIWindowScene {
     var keyWindow: UIWindow? {
         self.windows.first { $0.isKeyWindow }

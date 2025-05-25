@@ -82,20 +82,6 @@ struct ListsView: View {
                 .eq("user_id", value: currentUser.id)
                 .execute()
                 .value
-        } catch let decodingError as DecodingError {
-            // Show more detailed decoding error
-            switch decodingError {
-            case .typeMismatch(let type, let context):
-                toastMessage = "Type mismatch: \(type) - \(context.debugDescription)"
-            case .valueNotFound(let type, let context):
-                toastMessage = "Value not found: \(type) - \(context.debugDescription)"
-            case .keyNotFound(let key, let context):
-                toastMessage = "Key '\(key.stringValue)' not found: \(context.debugDescription)"
-            case .dataCorrupted(let context):
-                toastMessage = "Data corrupted: \(context.debugDescription)"
-            @unknown default:
-                toastMessage = "Unknown decoding error"
-            }
         } catch {
             toastMessage = "Error: \(error.localizedDescription)"
         }
