@@ -11,8 +11,9 @@ struct VeoListView: View {
     static let color2 = Color(hex: "#00b6a0")
     @State private var editingIndex: Int? = nil
     @State private var editingText: String = ""
-    @State private var pinchScale: CGFloat = 1.0
+    @GestureState private var pinchScale: CGFloat = 1.0
     @State private var isExiting: Bool = false
+    @State private var exitingScale: CGFloat = 1.0
     
     var nonRenamableIndices: Set<Int> = [] // Indices of non-renamable items, default empty
     // Helper to determine if an item is editable
@@ -20,132 +21,120 @@ struct VeoListView: View {
         onRename != nil && idx < items.count && !nonRenamableIndices.contains(idx)
     }
     
+    // Helper to get safe area insets in a modern way
+    private var safeAreaInsets: UIEdgeInsets {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
+            .keyWindow?.safeAreaInsets ?? .zero
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            Text(title)
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
-                .padding(.vertical, 24)
-                .background(VeoListView.color1)
-            ForEach(items.indices, id: \.self) { idx in
-                ZStack(alignment: .leading) {
-                    if editingIndex == idx, isEditable(idx: idx) {
-                        TextField("Rename", text: $editingText, onCommit: {
-                            onRename?(idx, editingText)
-                            editingIndex = nil
-                        })
-                        .font(.title2)
+        ZStack {
+            // Main scalable content with proper backgrounds
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Title area with color1
+                    Text(title)
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
                         .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal)
-                        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                        .background(steppedGradientColor(for: idx))
-                        .onAppear { editingText = items[idx] }
-                    } else {
-                        HStack(spacing: 0) {
-                            Text(items[idx])
+                        .padding(.top, safeAreaInsets.top + 24)
+                        .padding(.bottom, 24)
+                        .background(VeoListView.color1)
+                    
+                    // List items
+                    ForEach(items.indices, id: \.self) { idx in
+                        ZStack(alignment: .leading) {
+                            if editingIndex == idx, isEditable(idx: idx) {
+                                TextField("Rename", text: $editingText, onCommit: {
+                                    onRename?(idx, editingText)
+                                    editingIndex = nil
+                                })
                                 .font(.title2)
                                 .foregroundColor(.white)
-                                .background(Color.clear)
+                                .padding(.horizontal)
+                                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                                .background(steppedGradientColor(for: idx))
+                                .onAppear { editingText = items[idx] }
+                            } else {
+                                HStack(spacing: 0) {
+                                    Text(items[idx])
+                                        .font(.title2)
+                                        .foregroundColor(.white)
+                                        .background(Color.clear)
+                                        .onTapGesture {
+                                            if isEditable(idx: idx) {
+                                                editingIndex = idx
+                                                editingText = items[idx]
+                                            } else if let onItemTap = onItemTap {
+                                                onItemTap(idx)
+                                            }
+                                        }
+                                    Spacer()
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                                .padding(.horizontal)
+                                .background(steppedGradientColor(for: idx))
+                                .contentShape(Rectangle())
                                 .onTapGesture {
-                                    if isEditable(idx: idx) {
-                                        editingIndex = idx
-                                        editingText = items[idx]
-                                    } else if let onItemTap = onItemTap {
+                                    // Only trigger onItemTap if not editing
+                                    if let onItemTap = onItemTap, editingIndex != idx {
                                         onItemTap(idx)
                                     }
                                 }
-                            Spacer()
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                        .padding(.horizontal)
-                        .background(steppedGradientColor(for: idx))
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            // Only trigger onItemTap if not editing
-                            if let onItemTap = onItemTap, editingIndex != idx {
-                                onItemTap(idx)
                             }
                         }
                     }
+                    
+                    // Bottom spacer to fill remaining space
+                    Spacer(minLength: safeAreaInsets.bottom)
+                        .frame(maxWidth: .infinity)
+                        .background(VeoListView.color2)
                 }
+                .background(VeoListView.color2)
             }
-            Spacer()
-                .frame(maxWidth: .infinity)
-                .background(steppedGradientColor(for: items.count))
-        }
-        .ignoresSafeArea(.container, edges: .bottom)
-        .gesture(
-            MagnificationGesture()
-                .onChanged { value in
-                    if isTopLevel {
-                        return
-                    }
-                    withAnimation(.easeOut(duration: 0.18)) {
-                        pinchScale = value
+            .background(
+                ZStack {
+                    // Background fills for overscroll (non-scaling)
+                    VeoListView.color2.ignoresSafeArea()
+                    VStack {
+                        VeoListView.color1.ignoresSafeArea(edges: .top)
+                            .frame(height: 200) // Tall enough for overscroll
+                        Spacer()
                     }
                 }
-                .onEnded { value in
-                    if isTopLevel {
-                        return
+            )
+            .highPriorityGesture(
+                MagnificationGesture()
+                    .updating($pinchScale) { value, state, transaction in
+                        if isTopLevel { return }
+                        state = value
                     }
-                    if value < 0.7 {
-                        isExiting = true
-                        onPinchExit?()
-                    } else {
-                        withAnimation(.easeOut(duration: 0.18)) {
-                            pinchScale = 1.0
+                    .onEnded { value in
+                        if isTopLevel { return }
+                        if value < 0.7 {
+                            isExiting = true
+                            exitingScale = value
+                            onPinchExit?()
                         }
                     }
-                }
-        )
-        .scaleEffect(pinchScale)
-        .animation(isExiting ? nil : .easeOut(duration: 0.18), value: pinchScale)
-        .onChange(of: isExiting) { exiting in
-            if !exiting {
-                pinchScale = 1.0
-            }
+            )
+            .scaleEffect(isExiting ? exitingScale : pinchScale)
+            .animation(isExiting ? nil : .easeOut(duration: 0.18), value: pinchScale)
         }
+        .ignoresSafeArea()
     }
     
     func steppedGradientColor(for index: Int) -> Color {
         guard items.count > 0 else { return VeoListView.color2 }
-        return VeoListView.steppedGradientColor(for: index, count: items.count)
-    }
-
-    static func steppedGradientColor(for index: Int, count: Int) -> Color {
-        guard count > 0 else { return VeoListView.color2 }
-        let t = Double(index) / Double(count)
-        return Color(
-            red: VeoListView.color1.components.red + (VeoListView.color2.components.red - VeoListView.color1.components.red) * t,
-            green: VeoListView.color1.components.green + (VeoListView.color2.components.green - VeoListView.color1.components.green) * t,
-            blue: VeoListView.color1.components.blue + (VeoListView.color2.components.blue - VeoListView.color1.components.blue) * t
-        )
+        return Color.steppedGradientColor(for: index, count: items.count)
     }
 }
 
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let r, g, b: Double
-        r = Double((int >> 16) & 0xFF) / 255.0
-        g = Double((int >> 8) & 0xFF) / 255.0
-        b = Double(int & 0xFF) / 255.0
-        self.init(red: r, green: g, blue: b)
-    }
-    
-    var components: (red: Double, green: Double, blue: Double) {
-        #if canImport(UIKit)
-        typealias NativeColor = UIColor
-        #elseif canImport(AppKit)
-        typealias NativeColor = NSColor
-        #endif
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        NativeColor(self).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        return (Double(red), Double(green), Double(blue))
+// Helper to get keyWindow for safeAreaInsets
+extension UIWindowScene {
+    var keyWindow: UIWindow? {
+        self.windows.first { $0.isKeyWindow }
     }
 }

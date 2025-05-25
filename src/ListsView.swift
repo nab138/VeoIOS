@@ -38,20 +38,27 @@ struct ListsView: View {
                     isTopLevel: true,
                     nonRenamableIndices: [lists.count]
                 )
+
                 if let selected = selectedList {
+                    Rectangle()
+                        .fill(Color.black.opacity(0.5))
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                        .zIndex(1)
+
                     VeoListView(
                         title: selected.name,
                         items: selected.items.map { $0.text },
                         onPinchExit: {
                             withAnimation(.easeOut(duration: 0.18)) { selectedList = nil }
                         },
-                        isTopLevel: false // Not top-level
+                        isTopLevel: false
                     )
                     .transition(.move(edge: .bottom))
-                    .zIndex(1)
+                    .zIndex(2)
                 }
             }
-            .animation(.easeOut(duration: 0.18), value: selectedList)
+            .animation(.easeInOut(duration: 0.27), value: selectedList)
         }
         .toast(
             message: toastMessage,
@@ -60,6 +67,7 @@ struct ListsView: View {
                 set: { if !$0 { toastMessage = nil } }
             )
         )
+        .background(VeoListView.color1)
         .task {
             await getLists()
         }

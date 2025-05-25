@@ -34,7 +34,7 @@ struct AuthView: View {
           }
           .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
           .padding(.horizontal, 0)
-          .background(VeoListView.steppedGradientColor(for: 0, count: rowCount))
+          .background(Color.steppedGradientColor(for: 0, count: rowCount))
           HStack {
             SecureField("Password", text: $password)
               .textContentType(.password)
@@ -47,7 +47,7 @@ struct AuthView: View {
           }
           .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
           .padding(.horizontal, 0)
-          .background(VeoListView.steppedGradientColor(for: 1, count: rowCount))
+          .background(Color.steppedGradientColor(for: 1, count: rowCount))
           // Sign in/up button styled like a VeoListView row (no button background, whole row is tappable)
           HStack {
             Text("Sign " + (signingUp ? "up" : "in"))
@@ -57,7 +57,7 @@ struct AuthView: View {
               .padding(.horizontal)
           }
           .frame(maxWidth: .infinity, minHeight: 64)
-          .background(VeoListView.steppedGradientColor(for: 2, count: rowCount))
+          .background(Color.steppedGradientColor(for: 2, count: rowCount))
           .contentShape(Rectangle())
           .onTapGesture {
             signInButtonTapped()
@@ -70,7 +70,7 @@ struct AuthView: View {
               .padding(.horizontal)
           }
           .frame(maxWidth: .infinity, minHeight: 64)
-          .background(VeoListView.steppedGradientColor(for: 3, count: rowCount))
+          .background(Color.steppedGradientColor(for: 3, count: rowCount))
           .contentShape(Rectangle())
           .onTapGesture {
             result = nil
@@ -82,7 +82,7 @@ struct AuthView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity, minHeight: 64)
-            .background(VeoListView.steppedGradientColor(for: 4, count: rowCount))
+            .background(Color.steppedGradientColor(for: 4, count: rowCount))
           }
           if !isLoading, let result {
             switch result {
@@ -96,7 +96,7 @@ struct AuthView: View {
                   .frame(maxWidth: .infinity, alignment: .center)
               }
               .frame(maxWidth: .infinity, minHeight: 64)
-              .background(VeoListView.steppedGradientColor(for: 4, count: rowCount))
+              .background(Color.steppedGradientColor(for: 4, count: rowCount))
             case .failure(let error):
               HStack {
                 Text(error.localizedDescription.prefix(1).capitalized + error.localizedDescription.dropFirst())
@@ -106,7 +106,7 @@ struct AuthView: View {
                   .padding(.horizontal)
               }
               .frame(maxWidth: .infinity, minHeight: 64)
-              .background(VeoListView.steppedGradientColor(for: 4, count: rowCount))
+              .background(Color.steppedGradientColor(for: 4, count: rowCount))
             }
           }
         }
