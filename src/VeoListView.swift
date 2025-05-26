@@ -4,6 +4,7 @@ struct VeoListView: View {
     let title: String
     let items: [String]
     var onRename: ((Int, String) -> Void)? = nil
+    var onAdd: ((String) -> Void)? = nil
     var onItemTap: ((Int) -> Void)? = nil
     var onPinchExit: (() -> Void)? = nil
     var isTopLevel: Bool = false
@@ -14,7 +15,12 @@ struct VeoListView: View {
     @GestureState private var pinchScale: CGFloat = 1.0
     @State private var isExiting: Bool = false
     @State private var exitingScale: CGFloat = 1.0
-    
+    @State private var scrollPosition: CGPoint = .zero
+    @State private var newItemText: String = ""
+    @State private var newItemBoxLocked: Bool = false
+    @FocusState private var isFocused: Bool
+    @State private var isDeletingNewItemBox: Bool = false
+
     var nonRenamableIndices: Set<Int> = []
     func isEditable(idx: Int) -> Bool {
         onRename != nil && idx < items.count && !nonRenamableIndices.contains(idx)
@@ -25,20 +31,64 @@ struct VeoListView: View {
             .keyWindow?.safeAreaInsets ?? .zero
     }
 
+    let rowHeight: CGFloat = 64
+
     var body: some View {
-        ZStack {
-            ScrollView {
+        ZStack(alignment: .top) {
+            ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
-                    Text(title)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
-                        .padding(.top, safeAreaInsets.top + 24)
-                        .padding(.bottom, 24)
-                        .background(VeoListView.color1)
-                    
+                    // Header: scrolls away unless overscrolling at top or locked open
+                    if overscrollHeight == 0 && !newItemBoxLocked {
+                        Text(title)
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+                            .padding(.top, safeAreaInsets.top + 24)
+                            .padding(.bottom, 24)
+                            .background(VeoListView.color1)
+                    } else {
+                        Spacer(minLength: titleBarHeight - (newItemBoxLocked ? 0 : max(0, scrollPosition.y)))
+                    }
+
+                    // New item box: appears when overscrolling or locked open
+                    if (overscrollHeight > 0 || newItemBoxLocked) && !isDeletingNewItemBox {
+                        ZStack(alignment: .leading) {
+                            TextField("Add new item" + (newItemBoxLocked ? "!" : "?"), text: $newItemText, onCommit: {
+                                if(newItemText.isEmpty) {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        isDeletingNewItemBox = true
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        newItemText = ""
+                                        newItemBoxLocked = false
+                                        scrollPosition = .zero
+                                        isDeletingNewItemBox = false
+                                    }
+                                } else {
+                                    if let onAdd = onAdd {
+                                        onAdd(newItemText)
+                                    }
+                                    newItemText = ""
+                                    newItemBoxLocked = false
+                                    scrollPosition = .zero
+                                }
+                            })
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding(.horizontal)
+                            .frame(maxWidth: .infinity, maxHeight: rowHeight, alignment: .leading)
+                            .background(steppedGradientColor(for: 0))
+                            .focused($isFocused)
+                            
+                        }
+                        .frame(height: overscrollHeight)
+                        .transition(.move(edge: .top))
+                        .animation(.easeInOut(duration: 0.3), value: isDeletingNewItemBox)
+                    }
+
+                    // List items
                     ForEach(items.indices, id: \.self) { idx in
                         ZStack(alignment: .leading) {
                             if editingIndex == idx, isEditable(idx: idx) {
@@ -50,7 +100,7 @@ struct VeoListView: View {
                                 .foregroundColor(.white)
                                 .padding(.horizontal)
                                 .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                                .background(steppedGradientColor(for: idx))
+                                .background(steppedGradientColor(for: Double(idx) + (overscrollHeight / rowHeight)))
                                 .onAppear { editingText = items[idx] }
                             } else {
                                 HStack(spacing: 0) {
@@ -70,7 +120,7 @@ struct VeoListView: View {
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                                 .padding(.horizontal)
-                                .background(steppedGradientColor(for: idx))
+                                .background(steppedGradientColor(for: Double(idx) + (overscrollHeight / rowHeight)))
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     if let onItemTap = onItemTap, editingIndex != idx {
@@ -85,14 +135,36 @@ struct VeoListView: View {
                         .frame(maxWidth: .infinity)
                         .background(VeoListView.color2)
                 }
-                .background(VeoListView.color2)
+                .background(GeometryReader { geometry in
+                    Color.clear
+                        .preference(key: ScrollOffsetPreferenceKey.self, value: geometry.frame(in: .named("scroll")).origin)
+                })
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
+                    // Clamp overscroll to rowHeight, lock open if fully stretched and released
+                    if !newItemBoxLocked {
+                        if value.y > 0 {
+                            self.scrollPosition = CGPoint(x: value.x, y: min(rowHeight, value.y))
+                        } else {
+                            self.scrollPosition = value
+                        }
+                        if value.y >= rowHeight {
+                            DispatchQueue.main.async {
+                                newItemBoxLocked = true
+                                newItemText = ""
+                                isFocused = true
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            }
+                        }
+                    }
+                }
             }
+            .coordinateSpace(name: "scroll")
             .background(
                 ZStack {
                     VeoListView.color2.ignoresSafeArea()
                     VStack {
                         VeoListView.color1.ignoresSafeArea(edges: .top)
-                            .frame(height: 200)
+                            .frame(height: 170)
                         Spacer()
                     }
                 }
@@ -114,13 +186,52 @@ struct VeoListView: View {
             )
             .scaleEffect(isExiting ? exitingScale : pinchScale)
             .animation(isExiting ? nil : .easeOut(duration: 0.18), value: pinchScale)
+            .scrollDisabled(newItemBoxLocked)
+
+            // Pinned header: only when overscrolling or locked open
+            if overscrollHeight > 0 || newItemBoxLocked {
+                VStack(spacing: 0) {
+                    Text(title)
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                        .padding(.top, safeAreaInsets.top + 24)
+                        .padding(.bottom, 24)
+                        .background(VeoListView.color1)
+                        .frame(height: titleBarHeight)
+                    Spacer()
+                }
+                .ignoresSafeArea(edges: .top)
+                .transition(.move(edge: .top))
+            }
         }
         .ignoresSafeArea()
+        .onChange(of: overscrollHeight) { newValue in
+            // Focus the new item field when it appears
+            if (newValue > 0 || newItemBoxLocked) {
+                DispatchQueue.main.async {
+                }
+            }
+        }
     }
-    
-    func steppedGradientColor(for index: Int) -> Color {
-        guard items.count > 0 else { return VeoListView.color2 }
-        return Color.steppedGradientColor(for: index, count: items.count)
+
+    var titleBarHeight: CGFloat {
+        safeAreaInsets.top + 24 + 24 + UIFont.preferredFont(forTextStyle: .largeTitle).lineHeight
+    }
+
+    // Clamp overscroll to rowHeight, or keep open if locked
+    var overscrollHeight: CGFloat {
+        if newItemBoxLocked { return rowHeight }
+        return max(0, min(rowHeight, scrollPosition.y))
+    }
+
+    func steppedGradientColor(for index: Double) -> Color {
+        // New item box uses the same gradient as the first item
+        let count = max(items.count, 1)
+        let idx = max(0, index)
+        return Color.steppedGradientColor(for: idx, count: Double(count) + (overscrollHeight / rowHeight))
     }
 }
 
@@ -128,5 +239,12 @@ struct VeoListView: View {
 extension UIWindowScene {
     var keyWindow: UIWindow? {
         self.windows.first { $0.isKeyWindow }
+    }
+}
+
+struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGPoint = .zero
+    
+    static func reduce(value: inout CGPoint, nextValue: () -> CGPoint) {
     }
 }

@@ -23,9 +23,9 @@ extension Color {
         return (Double(red), Double(green), Double(blue))
     }
 
-    static func steppedGradientColor(for index: Int, count: Int) -> Color {
+        static func steppedGradientColor(for index: Double, count: Double) -> Color {
         guard count > 0 else { return VeoListView.color2 }
-        let t = Double(index) / Double(count)
+        let t = index / count
         return Color(
             red: VeoListView.color1.components.red + (VeoListView.color2.components.red - VeoListView.color1.components.red) * t,
             green: VeoListView.color1.components.green + (VeoListView.color2.components.green - VeoListView.color1.components.green) * t,

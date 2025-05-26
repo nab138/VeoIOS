@@ -33,7 +33,7 @@ struct AuthView: View {
           }
           .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
           .padding(.horizontal, 0)
-          .background(Color.steppedGradientColor(for: 0, count: rowCount))
+          .background(Color.steppedGradientColor(for: 0, count: Double(rowCount)))
           HStack {
             SecureField("Password", text: $password)
               .textContentType(.password)
@@ -46,7 +46,7 @@ struct AuthView: View {
           }
           .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
           .padding(.horizontal, 0)
-          .background(Color.steppedGradientColor(for: 1, count: rowCount))
+          .background(Color.steppedGradientColor(for: 1, count: Double(rowCount)))
           // Sign in/up button styled like a VeoListView row (no button background, whole row is tappable)
           HStack {
             Text("Sign in")
@@ -56,7 +56,7 @@ struct AuthView: View {
               .padding(.horizontal)
           }
           .frame(maxWidth: .infinity, minHeight: 64)
-          .background(Color.steppedGradientColor(for: 2, count: rowCount))
+          .background(Color.steppedGradientColor(for: 2, count: Double(rowCount)))
           .contentShape(Rectangle())
           .onTapGesture {
             signInButtonTapped()
@@ -69,7 +69,7 @@ struct AuthView: View {
               .padding(.horizontal)
           }
           .frame(maxWidth: .infinity, minHeight: 64)
-          .background(Color.steppedGradientColor(for: 3, count: rowCount))
+          .background(Color.steppedGradientColor(for: 3, count: Double(rowCount)))
           .contentShape(Rectangle())
           .onTapGesture {
             signUpButtonTapped()
@@ -80,7 +80,7 @@ struct AuthView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity, minHeight: 64)
-            .background(Color.steppedGradientColor(for: 4, count: rowCount))
+            .background(Color.steppedGradientColor(for: 4, count: Double(rowCount)))
           }
           if !isLoading, let result {
             switch result {
@@ -95,7 +95,7 @@ struct AuthView: View {
                   .padding(.horizontal)
               }
               .frame(maxWidth: .infinity, minHeight: 64)
-              .background(Color.steppedGradientColor(for: 4, count: rowCount))
+              .background(Color.steppedGradientColor(for: 4, count: Double(rowCount)))
             }
           }
         }
