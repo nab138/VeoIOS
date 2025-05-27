@@ -37,7 +37,6 @@ struct VeoListView: View {
         ZStack(alignment: .top) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
-                    // Header: scrolls away unless overscrolling at top or locked open
                     if overscrollHeight == 0 && !newItemBoxLocked {
                         Text(title)
                             .font(.largeTitle)
@@ -70,10 +69,10 @@ struct VeoListView: View {
                                     if let onAdd = onAdd {
                                         onAdd(newItemText)
                                     }
-                                    newItemText = ""
-                                    newItemBoxLocked = false
-                                    scrollPosition = .zero
                                 }
+                                newItemText = ""
+                                newItemBoxLocked = false
+                                scrollPosition = .zero
                             })
                             .font(.title2)
                             .foregroundColor(.white)
@@ -140,17 +139,16 @@ struct VeoListView: View {
                         .preference(key: ScrollOffsetPreferenceKey.self, value: geometry.frame(in: .named("scroll")).origin)
                 })
                 .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-                    // Clamp overscroll to rowHeight, lock open if fully stretched and released
                     if !newItemBoxLocked {
                         if value.y > 0 {
                             self.scrollPosition = CGPoint(x: value.x, y: min(rowHeight, value.y))
+                            newItemText = ""
                         } else {
                             self.scrollPosition = value
                         }
                         if value.y >= rowHeight {
                             DispatchQueue.main.async {
                                 newItemBoxLocked = true
-                                newItemText = ""
                                 isFocused = true
                                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                             }

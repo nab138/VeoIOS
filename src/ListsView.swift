@@ -4,6 +4,7 @@ struct ListsView: View {
     @State var lists: [List] = []
     @State private var toastMessage: String? = nil
     @State private var selectedList: List? = nil
+    @State private var selectedItems: [Item] = []
     @Namespace private var animation
 
     var body: some View {
@@ -28,6 +29,18 @@ struct ListsView: View {
                         if idx < lists.count {
                             selectedList = lists[idx]
                             UISelectionFeedbackGenerator().selectionChanged()
+                            Task {
+                                do {
+                                    selectedItems = try await supabase
+                                        .from("items")
+                                        .select()
+                                        .eq("list_id", value: selectedList!.id)
+                                        .execute()
+                                        .value
+                                } catch {
+                                    toastMessage = "Failed to load items: \(error.localizedDescription)"
+                                }
+                            }
                             return
                         }
                         let action = idx - lists.count
@@ -54,15 +67,15 @@ struct ListsView: View {
 
                     VeoListView(
                         title: selected.name,
-                        items: selected.items.map { $0.text },
+                        items: selectedItems.map { $0.text },
                         onRename: { idx, newText in
                             Task {
-                                await renameListItem(at: lists.firstIndex(of: selected) ?? 0, itemIndex: idx, to: newText)
+                                await renameItem(at: idx, to: newText)
                             }
                         },
                         onAdd: { text in
                             Task {
-                                await addListItem(at: lists.firstIndex(of: selected) ?? 0, text: text)
+                                await addItem(name: text)
                             }
                         },
                         onPinchExit: {
@@ -107,7 +120,7 @@ struct ListsView: View {
     func renameList(at idx: Int, to newName: String) async {
         guard idx < lists.count else { return }
         let oldName = lists[idx].name
-        lists[idx].name = newName // Optimistically update
+        lists[idx].name = newName
         do {
             _ = try await supabase
                 .from("lists")
@@ -115,7 +128,7 @@ struct ListsView: View {
                 .eq("id", value: lists[idx].id)
                 .execute()
         } catch {
-            lists[idx].name = oldName // Revert if failed
+            lists[idx].name = oldName 
             toastMessage = "Rename failed: \(error.localizedDescription)"
         }
     }
@@ -125,10 +138,9 @@ struct ListsView: View {
         do {
             let currentUser = try await supabase.auth.session.user
             let newList = List(
-                id: UUID().uuidString,
+                id: UUID(),
                 user_id: currentUser.id,
                 name: name,
-                items: [],
                 created_at: Date().iso8601String
             )
             lists.insert(newList, at: 0)
@@ -144,82 +156,58 @@ struct ListsView: View {
         }
     }
 
-    func renameListItem(at listIndex: Int, itemIndex: Int, to newText: String) async {
-        guard listIndex < lists.count, itemIndex < lists[listIndex].items.count else { return }
-        let oldText = lists[listIndex].items[itemIndex].text
-        lists[listIndex].items[itemIndex].text = newText
+    func addItem(name: String) async {
+        guard !name.isEmpty else { return }
         do {
-            if let selected = selectedList, selected.id == lists[listIndex].id {
-                selectedList = lists[listIndex]
-            }
+            let currentUser = try await supabase.auth.session.user
+            let newItem = Item(
+                id: UUID(),
+                user_id: currentUser.id,
+                list_id: selectedList!.id,
+                done: false,
+                text: name
+            )
+            selectedItems.insert(newItem, at: 0)
             _ = try await supabase
-                .from("lists")
-                .update(["items": lists[listIndex].items])
-                .eq("id", value: lists[listIndex].id)
+                .from("items")
+                .insert(newItem)
                 .execute()
         } catch {
-            lists[listIndex].items[itemIndex].text = oldText
-            toastMessage = "Rename item failed: \(error.localizedDescription)"
+            toastMessage = "Add item failed: \(error.localizedDescription)"
+            if let index = selectedItems.firstIndex(where: { $0.text == name }) {
+                selectedItems.remove(at: index)
+            }
         }
     }
 
-    func addListItem(at listIndex: Int, text: String) async {
-        guard listIndex < lists.count, !text.isEmpty else { return }
-        let newItem = Item(id: UUID(), done: false, text: text)
-        lists[listIndex].items.insert(newItem, at: 0)
+    func renameItem(at idx: Int, to newName: String) async {
+        guard let _ = selectedList, idx < selectedItems.count else { return }
+        let oldName = selectedItems[idx].text
+        selectedItems[idx].text = newName
         do {
-            if let selected = selectedList, selected.id == lists[listIndex].id {
-                selectedList = lists[listIndex]
-            }
             _ = try await supabase
-                .from("lists")
-                .update(["items": lists[listIndex].items])
-                .eq("id", value: lists[listIndex].id)
+                .from("items")
+                .update(["text": newName])
+                .eq("id", value: selectedItems[idx].id)
                 .execute()
         } catch {
-            lists[listIndex].items.remove(at: 0)
-            toastMessage = "Add item failed: \(error.localizedDescription)"
+            selectedItems[idx].text = oldName
+            toastMessage = "Rename item failed: \(error.localizedDescription)"
         }
     }
 }
 
 struct List: Decodable, Encodable, Identifiable, Equatable {
-    let id: String
+    let id: UUID
     let user_id: UUID
     var name: String
-    var items: [Item]
     let created_at: String
 }
 
 struct Item: Decodable, Encodable, Identifiable, Equatable {
-    var id: UUID
+    let id: UUID
+    let user_id: UUID
+    let list_id: UUID
     var done: Bool
     var text: String
-
-    // Custom decoding to handle missing id
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        done = try container.decode(Bool.self, forKey: .done)
-        text = try container.decode(String.self, forKey: .text)
-        id = (try? container.decode(UUID.self, forKey: .id)) ?? UUID()
-    }
-
-    // Custom encoding to always include id
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(done, forKey: .done)
-        try container.encode(text, forKey: .text)
-        try container.encode(id, forKey: .id)
-    }
-
-    // For manual creation
-    init(id: UUID = UUID(), done: Bool, text: String) {
-        self.id = id
-        self.done = done
-        self.text = text
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id, done, text
-    }
 }
