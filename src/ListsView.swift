@@ -35,6 +35,7 @@ struct ListsView: View {
                                         .from("items")
                                         .select()
                                         .eq("list_id", value: selectedList!.id)
+                                        .order("index", ascending: true)
                                         .execute()
                                         .value
                                 } catch {
@@ -51,6 +52,13 @@ struct ListsView: View {
                                 } catch {
                                     toastMessage = "Sign out failed: \(error.localizedDescription)"
                                 }
+                            }
+                        }
+                    },
+                    onDelete: { idx in
+                        if idx < lists.count {
+                            Task {
+                                await deleteList(at: idx)
                             }
                         }
                     },
@@ -133,6 +141,22 @@ struct ListsView: View {
         }
     }
 
+    func deleteList(at idx: Int) async {
+        guard idx < lists.count else { return }
+        let listToDelete = lists[idx]
+        lists.remove(at: idx)
+        do {
+            _ = try await supabase
+                .from("lists")
+                .delete()
+                .eq("id", value: listToDelete.id)
+                .execute()
+        } catch {
+            toastMessage = "Delete failed: \(error.localizedDescription)"
+            lists.insert(listToDelete, at: idx) // Reinsert if deletion fails
+        }
+    }
+
     func addList(name: String) async {
         guard !name.isEmpty else { return }
         do {
@@ -158,23 +182,34 @@ struct ListsView: View {
 
     func addItem(name: String) async {
         guard !name.isEmpty else { return }
+        let newId = UUID()
         do {
+        
             let currentUser = try await supabase.auth.session.user
             let newItem = Item(
-                id: UUID(),
+                id: newId,
                 user_id: currentUser.id,
                 list_id: selectedList!.id,
                 done: false,
-                text: name
+                text: name,
+                index: 0
             )
             selectedItems.insert(newItem, at: 0)
+            _ = try await supabase
+                .rpc("increment_item_indices", params: [
+                    "list_id_param": selectedList!.id
+                ])
+                .execute()
+            for i in 0..<selectedItems.count {
+                selectedItems[i].index += 1
+            }
             _ = try await supabase
                 .from("items")
                 .insert(newItem)
                 .execute()
         } catch {
             toastMessage = "Add item failed: \(error.localizedDescription)"
-            if let index = selectedItems.firstIndex(where: { $0.text == name }) {
+            if let index = selectedItems.firstIndex(where: { $0.id == newId }) {
                 selectedItems.remove(at: index)
             }
         }
@@ -210,4 +245,5 @@ struct Item: Decodable, Encodable, Identifiable, Equatable {
     let list_id: UUID
     var done: Bool
     var text: String
+    var index: Int
 }

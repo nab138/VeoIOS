@@ -7,6 +7,7 @@ struct VeoListView: View {
     var onAdd: ((String) -> Void)? = nil
     var onItemTap: ((Int) -> Void)? = nil
     var onPinchExit: (() -> Void)? = nil
+    var onDelete: ((Int) -> Void)? = nil
     var isTopLevel: Bool = false
     static let color1 = Color(hex: "#0072ce")
     static let color2 = Color(hex: "#00b6a0")
@@ -20,6 +21,10 @@ struct VeoListView: View {
     @State private var newItemBoxLocked: Bool = false
     @FocusState private var isFocused: Bool
     @State private var isDeletingNewItemBox: Bool = false
+    @GestureState private var swipePosition: CGSize = .zero
+    @State private var swipeIndex: Int? = nil
+    @State private var lastSwipeWidth: CGFloat = 0
+
 
     var nonRenamableIndices: Set<Int> = []
     func isEditable(idx: Int) -> Bool {
@@ -32,6 +37,7 @@ struct VeoListView: View {
     }
 
     let rowHeight: CGFloat = 64
+    let deleteOffset: CGFloat = -48
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -90,6 +96,22 @@ struct VeoListView: View {
                     // List items
                     ForEach(items.indices, id: \.self) { idx in
                         ZStack(alignment: .leading) {
+                            // Delete button behind the row, aligned to the right
+                            if isEditable(idx: idx) {
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: "trash")
+                                        .frame(width: UIScreen.main.bounds.size.width * 0.5, height: 64, alignment: .trailing)
+                                        .padding(.horizontal)
+                                        .opacity(swipeDist < deleteOffset ? 1.0 : 0.5)
+                                        .animation(.easeInOut(duration: 0.15), value: swipeDist)
+                                        .font(.title2)
+                                        .foregroundColor(.white)
+                                        .background(Color.red)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 64, maxHeight: 64)
+                            }
+                            // Row content
                             if editingIndex == idx, isEditable(idx: idx) {
                                 TextField("Rename", text: $editingText, onCommit: {
                                     onRename?(idx, editingText)
@@ -117,15 +139,46 @@ struct VeoListView: View {
                                         }
                                     Spacer()
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                                .frame(maxWidth: .infinity, minHeight: 64, maxHeight: 64, alignment: .leading)
                                 .padding(.horizontal)
                                 .background(steppedGradientColor(for: Double(idx) + (overscrollHeight / rowHeight)))
                                 .contentShape(Rectangle())
+                                .offset(x: swipeIndex == idx ? swipeDist : 0, y: 0)
+                                .animation(.easeInOut(duration: 0.15), value: swipePosition)
                                 .onTapGesture {
                                     if let onItemTap = onItemTap, editingIndex != idx {
                                         onItemTap(idx)
                                     }
                                 }
+                                .simultaneousGesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .updating($swipePosition) { value, state, transaction in
+                                            if isEditable(idx: idx) {
+                                                state = value.translation
+                                            }
+                                        }
+                                        .onChanged { value in
+                                            if isEditable(idx: idx) {
+                                                swipeIndex = idx
+                                                // play haptics if it just got past deleteOffset
+                                                if value.translation.width < deleteOffset && lastSwipeWidth >= deleteOffset {
+                                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                }
+                                                lastSwipeWidth = value.translation.width // <-- Track last swipe width
+                                            }
+                                        }
+                                        .onEnded { value in
+                                            if isEditable(idx: idx) {
+                                                withAnimation(.easeInOut(duration: 0.15)) {
+                                                    swipeIndex = nil
+                                                }
+                                                if value.translation.width < deleteOffset {
+                                                    onDelete?(idx)
+                                                }
+                                                lastSwipeWidth = 0
+                                            }
+                                        }
+                                )
                             }
                         }
                     }
@@ -167,7 +220,7 @@ struct VeoListView: View {
                     }
                 }
             )
-            .highPriorityGesture(
+            .simultaneousGesture(
                 MagnificationGesture()
                     .updating($pinchScale) { value, state, transaction in
                         if isTopLevel { return }
@@ -223,6 +276,14 @@ struct VeoListView: View {
     var overscrollHeight: CGFloat {
         if newItemBoxLocked { return rowHeight }
         return max(0, min(rowHeight, scrollPosition.y))
+    }
+
+
+    var swipeDist: CGFloat {
+        if(swipePosition.width < deleteOffset) {
+            return max(deleteOffset + (swipePosition.width - deleteOffset) * 0.4, -UIScreen.main.bounds.size.width * 0.5)
+        }
+        return swipePosition.width
     }
 
     func steppedGradientColor(for index: Double) -> Color {
