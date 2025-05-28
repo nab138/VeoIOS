@@ -1,0 +1,44 @@
+name: Build VeoIOS as IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    permissions:
+      packages: write
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+    
+      - name: Setup Theos
+        uses: nab138/theos-action@main
+        with:
+          cache-dir-theos: ${{ github.workspace }}/theos
+          cache-dir-sdks: ${{ github.workspace }}/theos/sdks
+          theos-src: https://github.com/theos/theos
+
+      - name: Cache .theos
+        uses: actions/cache@v4
+        with:
+          path: .theos
+          key: theos-${{ runner.os }}-${{ hashFiles('**/Makefile') }}
+          restore-keys: |
+            theos-${{ runner.os }}-
+
+      - name: Build
+        run: |
+          rm -f packages/*
+          make package FINALPACKAGE=1
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Veo
+          path: packages/*.ipa
