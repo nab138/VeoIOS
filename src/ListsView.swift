@@ -131,17 +131,14 @@ struct ListsView: View {
                     listIndexToDelete = nil
                 }
             }
-            // Confirmation dialog for undoing item delete (shown on shake)
-            .confirmationDialog(
-                "Undo delete item?",
-                isPresented: $showUndoItemDeletePrompt,
-                titleVisibility: .visible
-            ) {
+            // Center alert for undoing item delete (shown on shake)
+            .alert("Undo delete item?", isPresented: $showUndoItemDeletePrompt) {
                 Button("Undo", role: .none) {
                     undoDeleteItem()
                 }
                 Button("Cancel", role: .cancel) {
-                    // Just dismiss
+                    // Do not clear undo state here, allow shake again
+                    showUndoItemDeletePrompt = false
                 }
             }
         }
@@ -301,8 +298,7 @@ struct ListsView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             if showUndoItemDelete {
                 showUndoItemDelete = false
-                lastDeletedItem = nil
-                lastDeletedItemIndex = nil
+                // Do NOT clear lastDeletedItem/lastDeletedItemIndex here
                 showUndoItemDeletePrompt = false
             }
         }
@@ -317,7 +313,7 @@ struct ListsView: View {
             for i in idx..<selectedItems.count {
                 selectedItems[i].index -= 1
             }
-            // call the decrement RPC
+            toastMessage = "[list_id_param: \(selectedList!.id.uuidString), index_param: \(itemToDelete.index)]"
             _ = try await supabase
                 .rpc("decrement_item_indices", params: [
                     "list_id_param": selectedList!.id.uuidString,
@@ -328,6 +324,7 @@ struct ListsView: View {
             toastMessage = "Delete item failed: \(error.localizedDescription)"
             selectedItems.insert(itemToDelete, at: idx) // Reinsert if deletion fails
             showUndoItemDelete = false
+            // Only clear undo state if undo is not possible
             lastDeletedItem = nil
             lastDeletedItemIndex = nil
             showUndoItemDeletePrompt = false
@@ -338,9 +335,10 @@ struct ListsView: View {
         guard let item = lastDeletedItem, let idx = lastDeletedItemIndex else { return }
         selectedItems.insert(item, at: idx)
         showUndoItemDelete = false
+        showUndoItemDeletePrompt = false
+        // Now clear undo state after successful undo
         lastDeletedItem = nil
         lastDeletedItemIndex = nil
-        showUndoItemDeletePrompt = false
 
         Task {
             do {
@@ -349,8 +347,9 @@ struct ListsView: View {
                     selectedItems[i].index += 1
                 }
                 _ = try await supabase
-                    .rpc("increment_item_indices", params: [
-                        "list_id_param": selectedList!.id
+                    .rpc("increment_indices_after", params: [
+                        "list_id_param": selectedList!.id.uuidString,
+                        "index_param": "\(item.index)"
                     ])
                     .execute()
                 // Insert the item back into the database

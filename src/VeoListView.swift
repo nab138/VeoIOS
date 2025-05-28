@@ -24,7 +24,6 @@ struct VeoListView: View {
     @GestureState private var swipePosition: CGSize = .zero
     @State private var swipeIndex: Int? = nil
     @State private var lastSwipeWidth: CGFloat = 0
-    @State private var isPinching: Bool = false // <-- Add this line
 
     var nonRenamableIndices: Set<Int> = []
     func isEditable(idx: Int) -> Bool {
@@ -154,7 +153,7 @@ struct VeoListView: View {
                                     DragGesture(minimumDistance: 0)
                                         .onChanged { value in
                                             // Only allow swipe if not pinching and no other swipe is active or it's the same index
-                                            if isEditable(idx: idx) && !isPinching && (swipeIndex == nil || swipeIndex == idx) {
+                                            if isEditable(idx: idx) && pinchScale != 1 && (swipeIndex == nil || swipeIndex == idx) {
                                                 swipeIndex = idx
                                                 // play haptics if it just got past deleteOffset
                                                 if value.translation.width < deleteOffset && lastSwipeWidth >= deleteOffset {
@@ -164,12 +163,12 @@ struct VeoListView: View {
                                             }
                                         }
                                         .updating($swipePosition) { value, state, transaction in
-                                            if isEditable(idx: idx) && !isPinching && (swipeIndex == nil || swipeIndex == idx) {
+                                            if isEditable(idx: idx) && pinchScale != 1 && (swipeIndex == nil || swipeIndex == idx) {
                                                 state = value.translation
                                             }
                                         }
                                         .onEnded { value in
-                                            if isEditable(idx: idx) && !isPinching && swipeIndex == idx {
+                                            if isEditable(idx: idx)  && pinchScale != 1 && swipeIndex == idx {
                                                 withAnimation(.easeInOut(duration: 0.15)) {
                                                     swipeIndex = nil
                                                 }
@@ -223,17 +222,16 @@ struct VeoListView: View {
             )
             .simultaneousGesture(
                 MagnificationGesture()
-                    .onChanged { value in
-                        if isTopLevel { return }
-                        isPinching = true
-                    }
                     .updating($pinchScale) { value, state, transaction in
-                        if isTopLevel { return }
+                        if isTopLevel || swipePosition.width != .zero {
+                            return
+                        }
                         state = value
                     }
                     .onEnded { value in
-                        if isTopLevel { return }
-                        isPinching = false
+                        if isTopLevel || swipePosition.width != .zero {
+                            return
+                        }
                         if value < 0.7 {
                             isExiting = true
                             exitingScale = value
