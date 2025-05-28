@@ -150,7 +150,7 @@ struct VeoListView: View {
                                     }
                                 }
                                 .simultaneousGesture(
-                                    DragGesture(minimumDistance: 8)
+                                    DragGesture(minimumDistance: 20)
                                         .onChanged { value in
                                             // Only allow swipe if not pinching and no other swipe is active or it's the same index
                                             if isEditable(idx: idx) && pinchScale == 1 && (swipeIndex == nil || swipeIndex == idx) {

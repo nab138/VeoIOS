@@ -331,7 +331,7 @@ struct ListsView: View {
                     selectedItems[i].index += 1
                 }
                 _ = try await supabase
-                    .rpc("increment_indices_after", params: [
+                    .rpc("increment_indices_above", params: [
                         "list_id_param": selectedList!.id.uuidString.lowercased(),
                         "index_param": "\(item.index - 1)"
                     ])
