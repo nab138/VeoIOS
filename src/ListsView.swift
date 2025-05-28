@@ -14,7 +14,6 @@ struct ListsView: View {
     // State for undoing item delete
     @State private var lastDeletedItem: Item? = nil
     @State private var lastDeletedItemIndex: Int? = nil
-    @State private var showUndoItemDelete: Bool = false
     @State private var showUndoItemDeletePrompt: Bool = false
 
     var body: some View {
@@ -100,7 +99,7 @@ struct ListsView: View {
                             withAnimation(.easeOut(duration: 0.18)) { selectedList = nil }
                         },
                         onDelete: { idx in
-                            if idx < lists.count {
+                            if idx < selectedItems.count {
                                 Task {
                                     await deleteItem(at: idx)
                                 }
@@ -154,7 +153,7 @@ struct ListsView: View {
         .background(
             // Shake detector: triggers undo prompt if undo is available
             ShakeDetector {
-                if showUndoItemDelete, lastDeletedItem != nil {
+                if lastDeletedItem != nil {
                     showUndoItemDeletePrompt = true
                 }
             }
@@ -286,30 +285,11 @@ struct ListsView: View {
     }
 
     func deleteItem(at idx: Int) async {
-        toastMessage = "Deleting item..."
-        guard let _ = selectedList else { 
-            toastMessage = "Invalid list selection"
-            return
-         }
-        guard idx < selectedItems.count else { 
-            toastMessage = "Invalid item index"
-            return
-        }
+        guard let _ = selectedList, idx < selectedItems.count else { return }
         let itemToDelete = selectedItems[idx]
         selectedItems.remove(at: idx)
-        // Store for undo
         lastDeletedItem = itemToDelete
         lastDeletedItemIndex = idx
-        showUndoItemDelete = true
-
-        // Hide undo after 5 seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            if showUndoItemDelete {
-                showUndoItemDelete = false
-                // Do NOT clear lastDeletedItem/lastDeletedItemIndex here
-                showUndoItemDeletePrompt = false
-            }
-        }
 
         do {
             _ = try await supabase
@@ -329,9 +309,7 @@ struct ListsView: View {
                 .execute()
         } catch {
             toastMessage = "Delete item failed: \(error.localizedDescription)"
-            selectedItems.insert(itemToDelete, at: idx) // Reinsert if deletion fails
-            showUndoItemDelete = false
-            // Only clear undo state if undo is not possible
+            selectedItems.insert(itemToDelete, at: idx)
             lastDeletedItem = nil
             lastDeletedItemIndex = nil
             showUndoItemDeletePrompt = false
@@ -341,7 +319,6 @@ struct ListsView: View {
     func undoDeleteItem() {
         guard let item = lastDeletedItem, let idx = lastDeletedItemIndex else { return }
         selectedItems.insert(item, at: idx)
-        showUndoItemDelete = false
         showUndoItemDeletePrompt = false
         // Now clear undo state after successful undo
         lastDeletedItem = nil
