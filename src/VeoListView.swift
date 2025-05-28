@@ -221,7 +221,7 @@ struct VeoListView: View {
                     }
                 }
             )
-            .highPriorityGesture(
+            .simultaneousGesture(
                 MagnificationGesture()
                     .onChanged { value in
                         if isTopLevel { return }
