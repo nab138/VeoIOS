@@ -286,7 +286,14 @@ struct ListsView: View {
     }
 
     func deleteItem(at idx: Int) async {
-        guard let _ = selectedList, idx < selectedItems.count else { return }
+        guard let _ = selectedList else { 
+            toastMessage = "Invalid list selection"
+            return
+         }
+        guard idx < selectedItems.count else { 
+            toastMessage = "Invalid item index"
+            return
+        }
         let itemToDelete = selectedItems[idx]
         selectedItems.remove(at: idx)
         // Store for undo
@@ -313,10 +320,10 @@ struct ListsView: View {
             for i in idx..<selectedItems.count {
                 selectedItems[i].index -= 1
             }
-            toastMessage = "[list_id_param: \(selectedList!.id.uuidString), index_param: \(itemToDelete.index)]"
+            toastMessage = "[list_id_param: \(selectedList!.id.uuidString.lowercased()), index_param: \(itemToDelete.index)]"
             _ = try await supabase
                 .rpc("decrement_item_indices", params: [
-                    "list_id_param": selectedList!.id.uuidString,
+                    "list_id_param": selectedList!.id.uuidString.lowercased(),
                     "index_param": "\(itemToDelete.index)"
                 ])
                 .execute()
