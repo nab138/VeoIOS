@@ -24,7 +24,7 @@ struct VeoListView: View {
     @GestureState private var swipePosition: CGSize = .zero
     @State private var swipeIndex: Int? = nil
     @State private var lastSwipeWidth: CGFloat = 0
-
+    @State private var isPinching: Bool = false // <-- Add this line
 
     var nonRenamableIndices: Set<Int> = []
     func isEditable(idx: Int) -> Bool {
@@ -152,23 +152,24 @@ struct VeoListView: View {
                                 }
                                 .simultaneousGesture(
                                     DragGesture(minimumDistance: 0)
-                                        .updating($swipePosition) { value, state, transaction in
-                                            if isEditable(idx: idx) {
-                                                state = value.translation
-                                            }
-                                        }
                                         .onChanged { value in
-                                            if isEditable(idx: idx) {
+                                            // Only allow swipe if not pinching and no other swipe is active or it's the same index
+                                            if isEditable(idx: idx) && !isPinching && (swipeIndex == nil || swipeIndex == idx) {
                                                 swipeIndex = idx
                                                 // play haptics if it just got past deleteOffset
                                                 if value.translation.width < deleteOffset && lastSwipeWidth >= deleteOffset {
                                                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                                 }
-                                                lastSwipeWidth = value.translation.width // <-- Track last swipe width
+                                                lastSwipeWidth = value.translation.width
+                                            }
+                                        }
+                                        .updating($swipePosition) { value, state, transaction in
+                                            if isEditable(idx: idx) && !isPinching && (swipeIndex == nil || swipeIndex == idx) {
+                                                state = value.translation
                                             }
                                         }
                                         .onEnded { value in
-                                            if isEditable(idx: idx) {
+                                            if isEditable(idx: idx) && !isPinching && swipeIndex == idx {
                                                 withAnimation(.easeInOut(duration: 0.15)) {
                                                     swipeIndex = nil
                                                 }
@@ -220,14 +221,19 @@ struct VeoListView: View {
                     }
                 }
             )
-            .simultaneousGesture(
+            .highPriorityGesture(
                 MagnificationGesture()
+                    .onChanged { value in
+                        if isTopLevel { return }
+                        isPinching = true
+                    }
                     .updating($pinchScale) { value, state, transaction in
                         if isTopLevel { return }
                         state = value
                     }
                     .onEnded { value in
                         if isTopLevel { return }
+                        isPinching = false
                         if value < 0.7 {
                             isExiting = true
                             exitingScale = value
