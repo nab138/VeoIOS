@@ -7,6 +7,16 @@ struct ListsView: View {
     @State private var selectedItems: [Item] = []
     @Namespace private var animation
 
+    // Add state for delete confirmation
+    @State private var listIndexToDelete: Int? = nil
+    @State private var showDeleteConfirmation: Bool = false
+    
+    // State for undoing item delete
+    @State private var lastDeletedItem: Item? = nil
+    @State private var lastDeletedItemIndex: Int? = nil
+    @State private var showUndoItemDelete: Bool = false
+    @State private var showUndoItemDeletePrompt: Bool = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -57,9 +67,9 @@ struct ListsView: View {
                     },
                     onDelete: { idx in
                         if idx < lists.count {
-                            Task {
-                                await deleteList(at: idx)
-                            }
+                            // Instead of deleting immediately, show confirmation
+                            listIndexToDelete = idx
+                            showDeleteConfirmation = true
                         }
                     },
                     isTopLevel: true,
@@ -89,6 +99,13 @@ struct ListsView: View {
                         onPinchExit: {
                             withAnimation(.easeOut(duration: 0.18)) { selectedList = nil }
                         },
+                        onDelete: { idx in
+                            if idx < lists.count {
+                                Task {
+                                    await deleteItem(at: idx)
+                                }
+                            }
+                        },
                         isTopLevel: false
                     )
                     .transition(.move(edge: .bottom))
@@ -96,6 +113,37 @@ struct ListsView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.27), value: selectedList)
+            // Confirmation dialog for deleting a list
+            .confirmationDialog(
+                "Are you sure you want to delete this list?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let idx = listIndexToDelete {
+                        Task {
+                            await deleteList(at: idx)
+                        }
+                        listIndexToDelete = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    listIndexToDelete = nil
+                }
+            }
+            // Confirmation dialog for undoing item delete (shown on shake)
+            .confirmationDialog(
+                "Undo delete item?",
+                isPresented: $showUndoItemDeletePrompt,
+                titleVisibility: .visible
+            ) {
+                Button("Undo", role: .none) {
+                    undoDeleteItem()
+                }
+                Button("Cancel", role: .cancel) {
+                    // Just dismiss
+                }
+            }
         }
         .toast(
             message: toastMessage,
@@ -104,7 +152,16 @@ struct ListsView: View {
                 set: { if !$0 { toastMessage = nil } }
             )
         )
+        // No overlay for undo toast
         .background(VeoListView.color1)
+        .background(
+            // Shake detector: triggers undo prompt if undo is available
+            ShakeDetector {
+                if showUndoItemDelete, lastDeletedItem != nil {
+                    showUndoItemDeletePrompt = true
+                }
+            }
+        )
         .task {
             await getLists()
         }
@@ -228,6 +285,115 @@ struct ListsView: View {
         } catch {
             selectedItems[idx].text = oldName
             toastMessage = "Rename item failed: \(error.localizedDescription)"
+        }
+    }
+
+    func deleteItem(at idx: Int) async {
+        guard let _ = selectedList, idx < selectedItems.count else { return }
+        let itemToDelete = selectedItems[idx]
+        selectedItems.remove(at: idx)
+        // Store for undo
+        lastDeletedItem = itemToDelete
+        lastDeletedItemIndex = idx
+        showUndoItemDelete = true
+
+        // Hide undo after 5 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            if showUndoItemDelete {
+                showUndoItemDelete = false
+                lastDeletedItem = nil
+                lastDeletedItemIndex = nil
+                showUndoItemDeletePrompt = false
+            }
+        }
+
+        do {
+            _ = try await supabase
+                .from("items")
+                .delete()
+                .eq("id", value: itemToDelete.id)
+                .execute()
+            // Update indices of remaining items
+            for i in idx..<selectedItems.count {
+                selectedItems[i].index -= 1
+            }
+            // call the decrement RPC
+            _ = try await supabase
+                .rpc("decrement_item_indices", params: [
+                    "list_id_param": selectedList!.id.uuidString,
+                    "index_param": "\(itemToDelete.index)"
+                ])
+                .execute()
+        } catch {
+            toastMessage = "Delete item failed: \(error.localizedDescription)"
+            selectedItems.insert(itemToDelete, at: idx) // Reinsert if deletion fails
+            showUndoItemDelete = false
+            lastDeletedItem = nil
+            lastDeletedItemIndex = nil
+            showUndoItemDeletePrompt = false
+        }
+    }
+
+    func undoDeleteItem() {
+        guard let item = lastDeletedItem, let idx = lastDeletedItemIndex else { return }
+        selectedItems.insert(item, at: idx)
+        showUndoItemDelete = false
+        lastDeletedItem = nil
+        lastDeletedItemIndex = nil
+        showUndoItemDeletePrompt = false
+
+        Task {
+            do {
+                // Increment indices for items after the restored one
+                for i in idx+1..<selectedItems.count {
+                    selectedItems[i].index += 1
+                }
+                _ = try await supabase
+                    .rpc("increment_item_indices", params: [
+                        "list_id_param": selectedList!.id
+                    ])
+                    .execute()
+                // Insert the item back into the database
+                _ = try await supabase
+                    .from("items")
+                    .insert(item)
+                    .execute()
+            } catch {
+                toastMessage = "Undo failed: \(error.localizedDescription)"
+            }
+        }
+    }
+}
+
+// ShakeDetector implementation
+struct ShakeDetector: UIViewControllerRepresentable {
+    var onShake: () -> Void
+
+    func makeUIViewController(context: Context) -> ShakeViewController {
+        let controller = ShakeViewController()
+        controller.onShake = onShake
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: ShakeViewController, context: Context) {}
+
+    class ShakeViewController: UIViewController {
+        var onShake: (() -> Void)?
+
+        override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+            if motion == .motionShake {
+                onShake?()
+            }
+        }
+
+        override var canBecomeFirstResponder: Bool { true }
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            becomeFirstResponder()
+        }
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            resignFirstResponder()
         }
     }
 }
