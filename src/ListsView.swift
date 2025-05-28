@@ -131,7 +131,7 @@ struct ListsView: View {
                 }
             }
             // Center alert for undoing item delete (shown on shake)
-            .alert("Undo delete item?", isPresented: $showUndoItemDeletePrompt) {
+            .alert("Undo delete?", isPresented: $showUndoItemDeletePrompt) {
                 Button("Undo", role: .none) {
                     undoDeleteItem()
                 }
@@ -318,29 +318,32 @@ struct ListsView: View {
 
     func undoDeleteItem() {
         guard let item = lastDeletedItem, let idx = lastDeletedItemIndex else { return }
-        selectedItems.insert(item, at: idx)
-        showUndoItemDeletePrompt = false
-        // Now clear undo state after successful undo
-        lastDeletedItem = nil
-        lastDeletedItemIndex = nil
+        // Set the item's index to the correct value
+        let restoredItem = Item(
+            id: item.id,
+            user_id: item.user_id,
+            list_id: item.list_id,
+            done: item.done,
+            text: item.text,
+            index: idx
+        )
 
         Task {
             do {
-                // Increment indices for items after the restored one
-                for i in idx+1..<selectedItems.count {
-                    selectedItems[i].index += 1
-                }
+                // Use your original RPC: increment indices strictly greater than the given index
                 _ = try await supabase
-                    .rpc("increment_indices_above", params: [
-                        "list_id_param": selectedList!.id.uuidString.lowercased(),
-                        "index_param": "\(item.index - 1)"
+                    .rpc("increment_item_indices", params: [
+                        "list_id_param": selectedList!.id
                     ])
                     .execute()
-                // Insert the item back into the database
                 _ = try await supabase
                     .from("items")
-                    .insert(item)
+                    .insert(restoredItem)
                     .execute()
+                selectedItems.insert(restoredItem, at: idx)
+                showUndoItemDeletePrompt = false
+                lastDeletedItem = nil
+                lastDeletedItemIndex = nil
             } catch {
                 toastMessage = "Undo failed: \(error.localizedDescription)"
             }
