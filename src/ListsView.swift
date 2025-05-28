@@ -286,6 +286,7 @@ struct ListsView: View {
     }
 
     func deleteItem(at idx: Int) async {
+        toastMessage = "Deleting item..."
         guard let _ = selectedList else { 
             toastMessage = "Invalid list selection"
             return
@@ -320,11 +321,10 @@ struct ListsView: View {
             for i in idx..<selectedItems.count {
                 selectedItems[i].index -= 1
             }
-            toastMessage = "[list_id_param: \(selectedList!.id.uuidString.lowercased()), index_param: \(itemToDelete.index)]"
             _ = try await supabase
                 .rpc("decrement_item_indices", params: [
                     "list_id_param": selectedList!.id.uuidString.lowercased(),
-                    "index_param": "\(itemToDelete.index)"
+                    "index_param": "\(itemToDelete.index - 1)"
                 ])
                 .execute()
         } catch {
@@ -355,8 +355,8 @@ struct ListsView: View {
                 }
                 _ = try await supabase
                     .rpc("increment_indices_after", params: [
-                        "list_id_param": selectedList!.id.uuidString,
-                        "index_param": "\(item.index)"
+                        "list_id_param": selectedList!.id.uuidString.lowercased(),
+                        "index_param": "\(item.index - 1)"
                     ])
                     .execute()
                 // Insert the item back into the database
