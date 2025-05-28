@@ -153,7 +153,7 @@ struct VeoListView: View {
                                     DragGesture(minimumDistance: 0)
                                         .onChanged { value in
                                             // Only allow swipe if not pinching and no other swipe is active or it's the same index
-                                            if isEditable(idx: idx) && pinchScale != 1 && (swipeIndex == nil || swipeIndex == idx) {
+                                            if isEditable(idx: idx) && pinchScale == 1 && (swipeIndex == nil || swipeIndex == idx) {
                                                 swipeIndex = idx
                                                 // play haptics if it just got past deleteOffset
                                                 if value.translation.width < deleteOffset && lastSwipeWidth >= deleteOffset {
@@ -163,12 +163,12 @@ struct VeoListView: View {
                                             }
                                         }
                                         .updating($swipePosition) { value, state, transaction in
-                                            if isEditable(idx: idx) && pinchScale != 1 && (swipeIndex == nil || swipeIndex == idx) {
+                                            if isEditable(idx: idx) && pinchScale == 1 && (swipeIndex == nil || swipeIndex == idx) {
                                                 state = value.translation
                                             }
                                         }
                                         .onEnded { value in
-                                            if isEditable(idx: idx)  && pinchScale != 1 && swipeIndex == idx {
+                                            if isEditable(idx: idx)  && pinchScale == 1 && swipeIndex == idx {
                                                 withAnimation(.easeInOut(duration: 0.15)) {
                                                     swipeIndex = nil
                                                 }
